@@ -40,6 +40,8 @@ import org.hamcrest.CoreMatchers;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runner.Runner;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -299,6 +301,80 @@ public class CalciteRemoteDriverTest {
       }
       assertThat(n, equalTo(2));
     }
+  }
+
+  @Test public void testRemoteExecuteMultiQueriesInSameStatement() throws Exception {
+    try (Connection remoteConnection = getRemoteConnection()) {
+      final Statement statement = remoteConnection.createStatement();
+      final String sql = "values (1, 'a'), (cast(null as integer), 'b')";
+      ResultSet resultSet = statement.executeQuery(sql);
+      int n = 0;
+      while (resultSet.next()) {
+        ++n;
+      }
+      assertThat(n, equalTo(2));
+
+      resultSet = statement.executeQuery(sql);
+      n = 0;
+      while (resultSet.next()) {
+        ++n;
+      }
+      assertThat(n, equalTo(2));
+    }
+  }
+
+  @Test public void testRemoteExecuteMultiQueriesInDiffStatement() throws Exception {
+    try (Connection remoteConnection = getRemoteConnection()) {
+      Statement statement = remoteConnection.createStatement();
+      final String sql = "values (1, 'a'), (cast(null as integer), 'b')";
+      ResultSet resultSet = statement.executeQuery(sql);
+      int n = 0;
+      while (resultSet.next()) {
+        ++n;
+      }
+      assertThat(n, equalTo(2));
+
+      statement = remoteConnection.createStatement();
+      resultSet = statement.executeQuery(sql);
+      n = 0;
+      while (resultSet.next()) {
+        ++n;
+      }
+      assertThat(n, equalTo(2));
+    }
+  }
+
+  @Test public void testRemoteExecuteMultiQueriesWithMoreResultInSameStatement() throws Exception {
+    try (Connection remoteConnection = getRemoteConnection()) {
+      final Statement statement = remoteConnection.createStatement();
+      StringBuffer stringBuffer = new StringBuffer();
+      stringBuffer.append("values ");
+      final int resultSize = 1000;
+      for (int i = 0; i < resultSize; i++) {
+        stringBuffer.append("(").append(i).append(", ").append(i + 1).append(")");
+        if (i != resultSize - 1) {
+          stringBuffer.append(", ");
+        }
+      }
+
+      final String sql = stringBuffer.toString();
+
+      // First time to execute sql.
+      ResultSet resultSet = statement.executeQuery(sql);
+      int n = 0;
+      while (resultSet.next()) {
+        ++n;
+      }
+      assertThat(n, equalTo(resultSize));
+
+      // Execute same sql again in same statement.
+      resultSet = statement.executeQuery(sql);
+      n = 0;
+      while (resultSet.next()) {
+        ++n;
+      }
+    }
+
   }
 
   /** For each (source, destination) type, make sure that we can convert bind
