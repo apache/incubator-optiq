@@ -193,8 +193,9 @@ public abstract class SqlOperator {
    * @return acceptable range
    */
   public SqlOperandCountRange getOperandCountRange() {
-    if (operandTypeChecker != null) {
-      return operandTypeChecker.getOperandCountRange();
+    SqlOperandTypeChecker checker = getOperandTypeChecker();
+    if (checker != null) {
+      return checker.getOperandCountRange();
     }
 
     // If you see this error you need to override this method
@@ -441,7 +442,7 @@ public abstract class SqlOperator {
     preValidateCall(validator, scope, call);
 
     // Check the number of operands
-    checkOperandCount(validator, operandTypeChecker, call);
+    checkOperandCount(validator, getOperandTypeChecker(), call);
 
     SqlCallBinding opBinding = new SqlCallBinding(validator, scope, call);
 
@@ -663,7 +664,8 @@ public abstract class SqlOperator {
       SqlCallBinding callBinding,
       boolean throwOnFailure) {
     // Check that all of the operands are of the right type.
-    if (null == operandTypeChecker) {
+    SqlOperandTypeChecker checker = getOperandTypeChecker();
+    if (null == checker) {
       // If you see this you must either give operandTypeChecker a value
       // or override this method.
       throw Util.needToImplement(this);
@@ -673,7 +675,7 @@ public abstract class SqlOperator {
       for (Ord<SqlNode> operand : Ord.zip(callBinding.operands())) {
         if (operand.e != null
             && operand.e.getKind() == SqlKind.DEFAULT
-            && !operandTypeChecker.isOptional(operand.i)) {
+            && !checker.isOptional(operand.i)) {
           throw callBinding.getValidator().newValidationError(
               callBinding.getCall(),
               RESOURCE.defaultForOptionalParameter());
@@ -681,7 +683,7 @@ public abstract class SqlOperator {
       }
     }
 
-    return operandTypeChecker.checkOperandTypes(
+    return checker.checkOperandTypes(
         callBinding,
         throwOnFailure);
   }
@@ -743,10 +745,11 @@ public abstract class SqlOperator {
    * example) can be replaced by a specified name.
    */
   public String getAllowedSignatures(String opNameToUse) {
-    assert operandTypeChecker != null
+    SqlOperandTypeChecker checker = getOperandTypeChecker();
+    assert  checker != null
         : "If you see this, assign operandTypeChecker a value "
         + "or override this function";
-    return operandTypeChecker.getAllowedSignatures(this, opNameToUse)
+    return checker.getAllowedSignatures(this, opNameToUse)
         .trim();
   }
 
