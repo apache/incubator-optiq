@@ -190,8 +190,15 @@ public class RelJson {
     return new RelFieldCollation(field, direction, nullDirection);
   }
 
+  /**
+   * When serialized to json string, a {@link RelDistribution} object will serialized to
+   * a map, see {@link #toJson(RelDistribution)}
+   */
   public RelDistribution toDistribution(Object o) {
-    return RelDistributions.ANY; // TODO:
+    final Map map = (Map) o;
+    final RelDistribution.Type type = RelEnumTypes.toEnum((String) map.get("type"));
+    final List<Number> keys = (List) map.get("keys");
+    return RelDistributions.distribution(type, keys);
   }
 
   public RelDataType toType(RelDataTypeFactory typeFactory, Object o) {
@@ -285,6 +292,8 @@ public class RelJson {
       return toJson((RelDataType) value);
     } else if (value instanceof RelDataTypeField) {
       return toJson((RelDataTypeField) value);
+    } else if (value instanceof RelDistribution) {
+      return toJson((RelDistribution) value);
     } else {
       throw new UnsupportedOperationException("type not serializable: "
           + value + " (type " + value.getClass().getCanonicalName() + ")");
@@ -441,6 +450,13 @@ public class RelJson {
       map.put("type", windowBound.isPreceding() ? "PRECEDING" : "FOLLOWING");
       map.put("offset", toJson(windowBound.getOffset()));
     }
+    return map;
+  }
+
+  private Object toJson(RelDistribution distribution) {
+    final Map<String, Object> map = jsonBuilder.map();
+    map.put("type", RelEnumTypes.fromEnum(distribution.getType()));
+    map.put("keys", distribution.getKeys());
     return map;
   }
 
