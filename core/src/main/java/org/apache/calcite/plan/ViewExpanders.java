@@ -19,6 +19,7 @@ package org.apache.calcite.plan;
 import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.hint.RelHint;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.sql.parser.SqlParser;
 
 import com.google.common.collect.ImmutableList;
 
@@ -53,8 +54,8 @@ public abstract class ViewExpanders {
       }
 
       public RelRoot expandView(RelDataType rowType, String queryString,
-          List<String> schemaPath, List<String> viewPath) {
-        return viewExpander.expandView(rowType, queryString, schemaPath,
+          SqlParser.Config parserConfig, List<String> schemaPath, List<String> viewPath) {
+        return viewExpander.expandView(rowType, queryString, parserConfig, schemaPath,
             viewPath);
       }
     };
@@ -75,7 +76,7 @@ public abstract class ViewExpanders {
       }
 
       public RelRoot expandView(RelDataType rowType, String queryString,
-          List<String> schemaPath, List<String> viewPath) {
+          SqlParser.Config parserConfig, List<String> schemaPath, List<String> viewPath) {
         throw new UnsupportedOperationException();
       }
 
