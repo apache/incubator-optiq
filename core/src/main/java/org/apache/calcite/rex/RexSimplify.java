@@ -1105,6 +1105,10 @@ public class RexSimplify {
       return false;
     }
 
+    @Override public Boolean visitLambdaRef(RexLambdaRef localRef) {
+      return false;
+    }
+
     @Override public Boolean visitLiteral(RexLiteral literal) {
       return true;
     }
@@ -1150,6 +1154,10 @@ public class RexSimplify {
     }
 
     @Override public Boolean visitPatternFieldRef(RexPatternFieldRef fieldRef) {
+      return false;
+    }
+
+    @Override public Boolean visitLambda(RexLambda lambda) {
       return false;
     }
 

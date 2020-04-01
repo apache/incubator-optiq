@@ -45,6 +45,10 @@ public class RexVisitorImpl<R> implements RexVisitor<R> {
     return null;
   }
 
+  @Override public R visitLambdaRef(RexLambdaRef localRef) {
+    return null;
+  }
+
   public R visitLiteral(RexLiteral literal) {
     return null;
   }
@@ -115,6 +119,10 @@ public class RexVisitorImpl<R> implements RexVisitor<R> {
   }
 
   @Override public R visitPatternFieldRef(RexPatternFieldRef fieldRef) {
+    return null;
+  }
+
+  @Override public R visitLambda(RexLambda lambda) {
     return null;
   }
 

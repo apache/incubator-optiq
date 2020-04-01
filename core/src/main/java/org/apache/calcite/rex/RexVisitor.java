@@ -32,6 +32,8 @@ public interface RexVisitor<R> {
 
   R visitLocalRef(RexLocalRef localRef);
 
+  R visitLambdaRef(RexLambdaRef localRef);
+
   R visitLiteral(RexLiteral literal);
 
   R visitCall(RexCall call);
@@ -51,4 +53,6 @@ public interface RexVisitor<R> {
   R visitTableInputRef(RexTableInputRef fieldRef);
 
   R visitPatternFieldRef(RexPatternFieldRef fieldRef);
+
+  R visitLambda(RexLambda lambda);
 }

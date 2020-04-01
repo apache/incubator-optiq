@@ -4604,6 +4604,62 @@ public abstract class SqlOperatorBaseTest {
         });
   }
 
+  @Test public void testLambda() {
+    tester.checkType("(a)->2+2*a", "LAMBDA NOT NULL");
+    tester.checkType("(a,b)->a+b", "LAMBDA NOT NULL");
+    tester.checkType("(a,b,c)->2*a+b+c", "LAMBDA NOT NULL");
+  }
+
+  @Test public void testMapFilterFunc() {
+    final SqlTester tester = tester(SqlLibrary.MYSQL);
+
+    tester.checkString("map_filter(map[1, 2, 3, 4], (a,b)->true)",
+        "{1=2, 3=4}",
+        "(INTEGER NOT NULL, INTEGER NOT NULL) MAP NOT NULL");
+
+    tester.checkType("map_filter(null, (a,b)->a>b)", "NULL");
+    tester.checkFails("^map_filter(map[1, 2, 3, 4], (a,b)->2)^",
+        "Cannot apply 'MAP_FILTER' to arguments of type "
+            + "'MAP_FILTER\\(\\<\\(INTEGER, INTEGER\\) MAP\\>, <LAMBDA>\\)'. "
+            + "Supported form\\(s\\): MAP_FILTER\\(<ANY>, <LAMBDA\\(BOOLEAN, ANY, ANY\\)\\>\\)",
+        false);
+
+    tester.checkFails("^map_filter(map[1, 2, 3, 4], (a)->true)^",
+        "Cannot apply 'MAP_FILTER' to arguments of type "
+            + "'MAP_FILTER\\(\\<\\(INTEGER, INTEGER\\) MAP\\>, <LAMBDA>\\)'. "
+            + "Supported form\\(s\\): MAP_FILTER\\(<ANY>, <LAMBDA\\(BOOLEAN, ANY, ANY\\)\\>\\)",
+        false);
+
+    tester.checkFails("^map_filter(map[1, 2, 3, 4], (a, b, c)->true)^",
+        "Cannot apply 'MAP_FILTER' to arguments of type "
+            + "'MAP_FILTER\\(\\<\\(INTEGER, INTEGER\\) MAP\\>, <LAMBDA>\\)'. "
+            + "Supported form\\(s\\): MAP_FILTER\\(<ANY>, <LAMBDA\\(BOOLEAN, ANY, ANY\\)\\>\\)",
+        false);
+
+    tester.checkFails("^map_filter(null, (b)->2+2*a)^",
+        "Cannot apply 'MAP_FILTER' to arguments of type "
+            + "'MAP_FILTER\\(<NULL>, <LAMBDA>\\)'\\. "
+            + "Supported form\\(s\\): MAP_FILTER\\(<ANY>, <LAMBDA\\(BOOLEAN, ANY, ANY\\)\\>\\)",
+        false);
+
+    tester.checkFails("map_filter(map[1, 2, 5, 4], (a,b)->2+2*^c^)",
+        "Column 'C' not found in any table",
+        false);
+
+    tester.checkFails("^map_filter(map[1, 2, 5, 4], (a,b)->2)^",
+        "Cannot apply 'MAP_FILTER' to arguments of type "
+            + "'MAP_FILTER\\(\\<\\(INTEGER, INTEGER\\) MAP\\>, <LAMBDA>\\)'. "
+            + "Supported form\\(s\\): MAP_FILTER\\(<ANY>, <LAMBDA\\(BOOLEAN, ANY, ANY\\)\\>\\)",
+        false);
+
+    tester.checkString("map_filter(map[1, 2, 5, 4], (a,b)->a>b)",
+        "{5=4}",
+        "(INTEGER NOT NULL, INTEGER NOT NULL) MAP NOT NULL");
+    tester.checkString("map_filter(map[1, 'a', 3, 'b'], (a,b)->b='b')",
+        "{3=b}",
+        "(INTEGER NOT NULL, CHAR(1) NOT NULL) MAP NOT NULL");
+  }
+
   @Test public void testRegexpReplaceFunc() {
     Stream.of(SqlLibrary.MYSQL, SqlLibrary.ORACLE)
         .map(this::tester)

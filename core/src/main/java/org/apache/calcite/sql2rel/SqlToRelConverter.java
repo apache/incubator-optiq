@@ -81,6 +81,7 @@ import org.apache.calcite.rex.RexDynamicParam;
 import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexFieldCollation;
 import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexLambdaRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexPatternFieldRef;
@@ -88,6 +89,7 @@ import org.apache.calcite.rex.RexRangeRef;
 import org.apache.calcite.rex.RexShuttle;
 import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.rex.RexUtil;
+import org.apache.calcite.rex.RexVariable;
 import org.apache.calcite.rex.RexWindowBound;
 import org.apache.calcite.schema.ColumnStrategy;
 import org.apache.calcite.schema.ModifiableTable;
@@ -112,6 +114,7 @@ import org.apache.calcite.sql.SqlInsert;
 import org.apache.calcite.sql.SqlIntervalQualifier;
 import org.apache.calcite.sql.SqlJoin;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlLambda;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlMatchRecognize;
 import org.apache.calcite.sql.SqlMerge;
@@ -149,6 +152,7 @@ import org.apache.calcite.sql.util.SqlVisitor;
 import org.apache.calcite.sql.validate.AggregatingSelectScope;
 import org.apache.calcite.sql.validate.CollectNamespace;
 import org.apache.calcite.sql.validate.DelegatingScope;
+import org.apache.calcite.sql.validate.LambdaScope;
 import org.apache.calcite.sql.validate.ListScope;
 import org.apache.calcite.sql.validate.MatchRecognizeScope;
 import org.apache.calcite.sql.validate.ParameterScope;
@@ -199,6 +203,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
@@ -1927,6 +1932,27 @@ public class SqlToRelConverter {
       SqlNode node,
       Blackboard bb) {
     return null;
+  }
+
+  private RexNode convertLambda(Blackboard bb, SqlNode node) {
+    SqlLambda call = (SqlLambda) node;
+    final LambdaScope scope = (LambdaScope) validator.getLambdaScope(call);
+
+    Map<String, RexNode> nameToNodeMap = new HashMap<>();
+    List<RexVariable> variables = new ArrayList<>();
+    Map<String, RelDataType> parameters = scope.getParameters();
+
+    int i = 0;
+    for (Entry<String, RelDataType> entry : parameters.entrySet()) {
+      variables.add(new RexLambdaRef(i, entry.getValue()));
+      nameToNodeMap.put(entry.getKey(), rexBuilder.makeLambdaRef(entry.getValue(), i));
+      i++;
+    }
+
+    final Blackboard lambdaBb = createBlackboard(scope, nameToNodeMap, false);
+    lambdaBb.setRoot(bb.inputs);
+    RexNode expr = lambdaBb.convertExpression(call.getExpression());
+    return rexBuilder.makeLambdaCall(expr, variables);
   }
 
   private RexNode convertOver(Blackboard bb, SqlNode node) {
@@ -4507,13 +4533,17 @@ public class SqlToRelConverter {
      * not found
      */
     Pair<RexNode, Map<String, Integer>> lookupExp(SqlQualified qualified) {
+      boolean isLambdaScope = scope instanceof LambdaScope;
       if (nameToNodeMap != null && qualified.prefixLength == 1) {
         RexNode node = nameToNodeMap.get(qualified.identifier.names.get(0));
         if (node == null) {
-          throw new AssertionError("Unknown identifier '" + qualified.identifier
-              + "' encountered while expanding expression");
+          if (!isLambdaScope) {
+            throw new AssertionError("Unknown identifier '" + qualified.identifier
+                + "' encountered while expanding expression");
+          }
+        } else {
+          return Pair.of(node, null);
         }
-        return Pair.of(node, null);
       }
       final SqlNameMatcher nameMatcher =
           scope.getValidator().getCatalogReader().nameMatcher();
@@ -4531,7 +4561,7 @@ public class SqlToRelConverter {
       // preserved.
       final SqlValidatorScope ancestorScope = resolve.scope;
       boolean isParent = ancestorScope != scope;
-      if ((inputs != null) && !isParent) {
+      if ((inputs != null) && (!isParent || isLambdaScope)) {
         final LookupContext rels =
             new LookupContext(this, inputs, systemFieldList.size());
         final RexNode node = lookup(resolve.path.steps().get(0).i, rels);
@@ -4782,6 +4812,8 @@ public class SqlToRelConverter {
         return StandardConvertletTable.castToValidatedType(expr, rex,
             validator, rexBuilder);
 
+      case LAMBDA:
+        return convertLambda(this, expr);
       case SELECT:
       case EXISTS:
       case SCALAR_QUERY:

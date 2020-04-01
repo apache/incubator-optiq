@@ -99,6 +99,10 @@ public class RexInterpreter implements RexVisitor<Comparable> {
     throw unbound(localRef);
   }
 
+  @Override public Comparable visitLambdaRef(RexLambdaRef localRef) {
+    throw unbound(localRef);
+  }
+
   public Comparable visitLiteral(RexLiteral literal) {
     return Util.first(literal.getValue4(), N);
   }
@@ -133,6 +137,10 @@ public class RexInterpreter implements RexVisitor<Comparable> {
 
   public Comparable visitPatternFieldRef(RexPatternFieldRef fieldRef) {
     throw unbound(fieldRef);
+  }
+
+  @Override public Comparable visitLambda(RexLambda lambda) {
+    throw unbound(lambda);
   }
 
   public Comparable visitCall(RexCall call) {

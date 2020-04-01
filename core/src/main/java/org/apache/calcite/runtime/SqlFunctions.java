@@ -31,6 +31,7 @@ import org.apache.calcite.linq4j.function.Deterministic;
 import org.apache.calcite.linq4j.function.Experimental;
 import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.linq4j.function.NonDeterministic;
+import org.apache.calcite.linq4j.function.Predicate2;
 import org.apache.calcite.linq4j.tree.Primitive;
 import org.apache.calcite.runtime.FlatLists.ComparableList;
 import org.apache.calcite.util.Bug;
@@ -73,6 +74,7 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 
 import static org.apache.calcite.util.Static.RESOURCE;
@@ -2853,7 +2855,18 @@ public class SqlFunctions {
     }
   }
 
-  /** Type of argument passed into {@link #flatProduct}. */
+  public static Map<?, ?> mapFilter(Map<?, ?> map, Predicate2 predicate) {
+    if (map == null) {
+      return null;
+    }
+    return map.entrySet().stream()
+        .filter(e -> predicate.apply(e.getKey(), e.getValue()))
+        .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+  }
+
+  /**
+   * Type of argument passed into {@link #flatProduct}.
+   */
   public enum FlatProductInputType {
     SCALAR, LIST, MAP
   }

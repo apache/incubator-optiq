@@ -96,6 +96,10 @@ public class RexShuttle implements RexVisitor<RexNode> {
     return fieldRef;
   }
 
+  @Override public RexNode visitLambda(RexLambda lambda) {
+    return lambda;
+  }
+
   public RexNode visitCall(final RexCall call) {
     boolean[] update = {false};
     List<RexNode> clonedOperands = visitList(call.operands, update);
@@ -212,6 +216,10 @@ public class RexShuttle implements RexVisitor<RexNode> {
   }
 
   public RexNode visitLocalRef(RexLocalRef localRef) {
+    return localRef;
+  }
+
+  @Override public RexNode visitLambdaRef(RexLambdaRef localRef) {
     return localRef;
   }
 

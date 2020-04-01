@@ -1334,6 +1334,16 @@ Not implemented:
 | CURRENT_ROLE    | Returns the current active role
 | CURRENT_SCHEMA  | Returns the current schema
 
+
+## Lambda Expressions
+Calcite supports Lambda expressions which written with ->:
+
+LAMBDA Expressions Examples :
+
+    x -> x + 1
+    (x, y) -> x + y
+
+
 ### Conditional functions and operators
 
 | Operator syntax | Description
@@ -2342,6 +2352,7 @@ semantics.
 | m | JSON_STORAGE_SIZE(jsonValue)                   | Returns the number of bytes used to store the binary representation of a *jsonValue*
 | o | LEAST(expr [, expr ]* )                        | Returns the least of the expressions
 | m p | LEFT(string, length)                         | Returns the leftmost *length* characters from the *string*
+| m | MAP_FILTER(map, function(K, V, boolean))       | Constructs a map from those entries of map for which function returns true.
 | m | TO_BASE64(string)                              | Converts the *string* to base-64 encoded form and returns a encoded string
 | m | FROM_BASE64(string)                            | Returns the decoded result of a base-64 *string* as a string
 | o | LTRIM(string)                                  | Returns *string* with all blanks removed from the start

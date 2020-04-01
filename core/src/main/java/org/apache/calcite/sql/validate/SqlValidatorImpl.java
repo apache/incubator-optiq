@@ -59,6 +59,7 @@ import org.apache.calcite.sql.SqlIntervalLiteral;
 import org.apache.calcite.sql.SqlIntervalQualifier;
 import org.apache.calcite.sql.SqlJoin;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlLambda;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlMatchRecognize;
 import org.apache.calcite.sql.SqlMerge;
@@ -2384,6 +2385,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     case EXCEPT:
     case VALUES:
     case WITH:
+    case LAMBDA:
     case OTHER_FUNCTION:
       if (alias == null) {
         alias = deriveAlias(node, nextGeneratedId++);
@@ -2698,6 +2700,24 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
           node,
           alias,
           forceNullable);
+      break;
+    case LAMBDA:
+      call = (SqlCall) node;
+      LambdaScope lambdaScope = new LambdaScope((SqlLambda) call, parentScope);
+      scopes.put(call, lambdaScope);
+
+      final LambdaNamespace lambdaNamespace =
+          new LambdaNamespace(this, (SqlLambda) call, node);
+      registerNamespace(
+          usingScope,
+          alias,
+          lambdaNamespace,
+          forceNullable);
+
+      operands = call.getOperandList();
+      for (int i = 1; i < operands.size(); ++i) {
+        registerOperandSubQueries(lambdaScope, call, i);
+      }
       break;
 
     case WITH:
@@ -3018,6 +3038,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     }
     if (node.getKind().belongsTo(SqlKind.QUERY)
         || node.getKind() == SqlKind.MULTISET_QUERY_CONSTRUCTOR
+        || node.getKind() == SqlKind.LAMBDA
         || node.getKind() == SqlKind.MULTISET_VALUE_CONSTRUCTOR) {
       registerQuery(parentScope, null, node, node, null, false);
     } else if (node instanceof SqlCall) {
@@ -3961,6 +3982,11 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
   public SqlValidatorScope getWithScope(SqlNode withItem) {
     assert withItem.getKind() == SqlKind.WITH_ITEM;
     return scopes.get(withItem);
+  }
+
+  public SqlValidatorScope getLambdaScope(SqlNode lambda) {
+    assert lambda.getKind() == SqlKind.LAMBDA;
+    return scopes.get(lambda);
   }
 
   public SqlValidator setLenientOperatorLookup(boolean lenient) {
@@ -6000,6 +6026,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       case CURRENT_VALUE:
       case NEXT_VALUE:
       case WITH:
+      case LAMBDA:
         return call;
       }
       // Only visits arguments which are expressions. We don't want to

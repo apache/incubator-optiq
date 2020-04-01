@@ -897,6 +897,21 @@ public class SqlParserTest {
         .ok("((NOT (NOT (`A` = `B`))) OR (NOT (NOT (`C` = `D`))))");
   }
 
+
+  @Test public void testLambdaExpr() {
+    expr("(a)-> a")
+        .ok("((`A`) -> `A`)");
+    expr("(a)-> a * 2")
+        .ok("((`A`) -> (`A` * 2))");
+
+    expr("(a, b)-> a * b")
+        .ok("((`A`, `B`) -> (`A` * `B`))");
+
+    expr("(a, b, c)-> a * b * c")
+        .ok("((`A`, `B`, `C`) -> ((`A` * `B`) * `C`))");
+
+  }
+
   @Test public void testIsBooleans() {
     String[] inOuts = {"NULL", "TRUE", "FALSE", "UNKNOWN"};
 

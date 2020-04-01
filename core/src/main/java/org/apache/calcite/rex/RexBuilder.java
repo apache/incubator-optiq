@@ -181,6 +181,11 @@ public class RexBuilder {
     return makeFieldAccessInternal(expr, field);
   }
 
+
+  public RexNode makeLambdaCall(RexNode expr, List<RexVariable> variables) {
+    return new RexLambda(variables, expr);
+  }
+
   /**
    * Creates an expression accessing a field with a given ordinal from a
    * record.
@@ -838,6 +843,12 @@ public class RexBuilder {
       int i) {
     type = SqlTypeUtil.addCharsetAndCollation(type, typeFactory);
     return new RexInputRef(i, type);
+  }
+
+
+  public RexNode makeLambdaRef(RelDataType type, int i) {
+    type = SqlTypeUtil.addCharsetAndCollation(type, typeFactory);
+    return new RexLambdaRef(i, type);
   }
 
   /**
