@@ -982,6 +982,90 @@ public class MaterializedViewSubstitutionVisitorTest extends AbstractMaterialize
     sql(mv, query).ok();
   }
 
+  /** Unit test for FilterBottomJoin can be pulled up. */
+  @Test void testLeftFilterOnLeftJoinToJoinOk1() {
+    String mv = "select * from \n"
+        + "(select \"empid\", \"deptno\", \"name\" from \"emps\") \"t1\"\n"
+        + "left join (select \"deptno\", \"name\" from \"depts\") \"t2\"\n"
+        + "on \"t1\".\"deptno\" = \"t2\".\"deptno\"";
+    String query = "select * from \n"
+        + "(select \"empid\", \"deptno\", \"name\" from \"emps\" where \"empid\" > 10) \"t1\"\n"
+        + "left join (select \"deptno\", \"name\" from \"depts\") \"t2\"\n"
+        + "on \"t1\".\"deptno\" = \"t2\".\"deptno\"";
+    sql(mv, query).ok();
+  }
+
+  @Test void testLeftFilterOnLeftJoinToJoinOk2() {
+    String mv = "select * from \n"
+        + "(select \"empid\", \"deptno\", \"name\" from \"emps\" where \"empid\" > 10) \"t1\"\n"
+        + "left join (select \"deptno\", \"name\" from \"depts\") \"t2\"\n"
+        + "on \"t1\".\"deptno\" = \"t2\".\"deptno\"";
+    String query = "select * from \n"
+        + "(select \"empid\", \"deptno\", \"name\" from \"emps\" where \"empid\" > 30) \"t1\"\n"
+        + "left join (select \"deptno\", \"name\" from \"depts\") \"t2\"\n"
+        + "on \"t1\".\"deptno\" = \"t2\".\"deptno\"";
+    sql(mv, query).ok();
+  }
+
+  @Test void testRightFilterOnLeftJoinToJoinFail() {
+    String mv = "select * from \n"
+        + "(select \"empid\", \"deptno\", \"name\" from \"emps\") \"t1\"\n"
+        + "left join (select \"deptno\", \"name\" from \"depts\") \"t2\"\n"
+        + "on \"t1\".\"deptno\" = \"t2\".\"deptno\"";
+    String query = "select * from \n"
+        + "(select \"empid\", \"deptno\", \"name\" from \"emps\") \"t1\"\n"
+        + "left join (select \"deptno\", \"name\" from \"depts\" where \"name\" is not null) \"t2\"\n"
+        + "on \"t1\".\"deptno\" = \"t2\".\"deptno\"";
+    sql(mv, query).noMat();
+  }
+
+  @Test void testRightFilterOnRightJoinToJoinOk() {
+    String mv = "select * from \n"
+        + "(select \"empid\", \"deptno\", \"name\" from \"emps\") \"t1\"\n"
+        + "right join (select \"deptno\", \"name\" from \"depts\") \"t2\"\n"
+        + "on \"t1\".\"deptno\" = \"t2\".\"deptno\"";
+    String query = "select * from \n"
+        + "(select \"empid\", \"deptno\", \"name\" from \"emps\") \"t1\"\n"
+        + "right join (select \"deptno\", \"name\" from \"depts\" where \"name\" is not null) \"t2\"\n"
+        + "on \"t1\".\"deptno\" = \"t2\".\"deptno\"";
+    sql(mv, query).ok();
+  }
+
+  @Test void testLeftFilterOnRightJoinToJoinFail() {
+    String mv = "select * from \n"
+        + "(select \"empid\", \"deptno\", \"name\" from \"emps\") \"t1\"\n"
+        + "right join (select \"deptno\", \"name\" from \"depts\") \"t2\"\n"
+        + "on \"t1\".\"deptno\" = \"t2\".\"deptno\"";
+    String query = "select * from \n"
+        + "(select \"empid\", \"deptno\", \"name\" from \"emps\" where \"empid\" > 30) \"t1\"\n"
+        + "right join (select \"deptno\", \"name\" from \"depts\") \"t2\"\n"
+        + "on \"t1\".\"deptno\" = \"t2\".\"deptno\"";
+    sql(mv, query).noMat();
+  }
+
+  @Test void testLeftFilterOnFullJoinToJoinFail() {
+    String mv = "select * from \n"
+        + "(select \"empid\", \"deptno\", \"name\" from \"emps\") \"t1\"\n"
+        + "full join (select \"deptno\", \"name\" from \"depts\") \"t2\"\n"
+        + "on \"t1\".\"deptno\" = \"t2\".\"deptno\"";
+    String query = "select * from \n"
+        + "(select \"empid\", \"deptno\", \"name\" from \"emps\" where \"empid\" > 30) \"t1\"\n"
+        + "full join (select \"deptno\", \"name\" from \"depts\") \"t2\"\n"
+        + "on \"t1\".\"deptno\" = \"t2\".\"deptno\"";
+    sql(mv, query).noMat();
+  }
+
+  @Test void testRightFilterOnFullJoinToJoinFail() {
+    String mv = "select * from \n"
+        + "(select \"empid\", \"deptno\", \"name\" from \"emps\") \"t1\"\n"
+        + "full join (select \"deptno\", \"name\" from \"depts\") \"t2\"\n"
+        + "on \"t1\".\"deptno\" = \"t2\".\"deptno\"";
+    String query = "select * from \n"
+        + "(select \"empid\", \"deptno\", \"name\" from \"emps\") \"t1\"\n"
+        + "full join (select \"deptno\", \"name\" from \"depts\" where \"name\" is not null) \"t2\"\n"
+        + "on \"t1\".\"deptno\" = \"t2\".\"deptno\"";
+    sql(mv, query).noMat();
+  }
 
   /** Unit test for logic functions
    * {@link org.apache.calcite.plan.SubstitutionVisitor#mayBeSatisfiable} and
