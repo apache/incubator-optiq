@@ -70,4 +70,8 @@ public class SqlUserDefinedAggFunction extends SqlAggFunction {
   @Override public SqlOperandMetadata getOperandTypeChecker() {
     return (SqlOperandMetadata) super.getOperandTypeChecker();
   }
+
+  @Override public boolean isDeterministic() {
+    return function.isDeterministic();
+  }
 }

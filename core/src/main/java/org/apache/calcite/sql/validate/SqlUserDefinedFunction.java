@@ -95,4 +95,9 @@ public class SqlUserDefinedFunction extends SqlFunction {
     return Lists.transform(function.getParameters(),
         FunctionParameter::getName);
   }
+
+  @Override public boolean isDeterministic() {
+    return function.isDeterministic();
+  }
+
 }
