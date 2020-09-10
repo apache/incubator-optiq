@@ -1206,8 +1206,8 @@ public class SubstitutionVisitor {
       if (joinRelType == null) {
         return null;
       }
-      if (joinRelType != JoinRelType.INNER
-          && !(joinRelType.isOuterJoin() && qInput0Cond.isAlwaysTrue())) {
+      // Check filter bottom join can be pulled up.
+      if (!canPullUpFilterBottomJoin(joinRelType, qInput0Cond, null)) {
         return null;
       }
       // Try pulling up MutableCalc only when Join condition references mapping.
@@ -1292,8 +1292,8 @@ public class SubstitutionVisitor {
       if (joinRelType == null) {
         return null;
       }
-      if (joinRelType != JoinRelType.INNER
-          && !(joinRelType.isOuterJoin() && qInput1Cond.isAlwaysTrue())) {
+      // Check filter bottom join can be pulled up.
+      if (!canPullUpFilterBottomJoin(joinRelType, null, qInput1Cond)) {
         return null;
       }
       // Try pulling up MutableCalc only when Join condition references mapping.
@@ -1377,16 +1377,11 @@ public class SubstitutionVisitor {
       final RexBuilder rexBuilder = call.getCluster().getRexBuilder();
 
       // Try pulling up MutableCalc only when:
-      // 1. it's inner join.
-      // 2. it's outer join but no filtering condition from MutableCalc.
       final JoinRelType joinRelType = sameJoinType(query.joinType, target.joinType);
       if (joinRelType == null) {
         return null;
       }
-      if (joinRelType != JoinRelType.INNER
-          && !(joinRelType.isOuterJoin()
-              && qInput0Cond.isAlwaysTrue()
-              && qInput1Cond.isAlwaysTrue())) {
+      if (!canPullUpFilterBottomJoin(joinRelType, qInput0Cond, qInput1Cond)) {
         return null;
       }
       if (!referenceByMapping(query.condition, qInput0Projs, qInput1Projs)) {
@@ -2013,6 +2008,38 @@ public class SubstitutionVisitor {
   public static boolean equalType(String desc0, MutableRel rel0, String desc1,
       MutableRel rel1, Litmus litmus) {
     return RelOptUtil.equal(desc0, rel0.rowType, desc1, rel1.rowType, litmus);
+  }
+
+  /**
+   * Check filter bottom join can be pull-up,
+   * when meeting JoinOnCalc of query unify to Join of target.
+   * Such as {@link JoinOnLeftCalcToJoinUnifyRule} <br/>
+   * {@link JoinOnRightCalcToJoinUnifyRule} <br/>
+   * {@link JoinOnCalcsToJoinUnifyRule} <br/>
+   */
+  private static boolean canPullUpFilterBottomJoin(JoinRelType joinType,
+                                                   RexNode leftFilterRexNode,
+                                                   RexNode rightFilterRexNode) {
+    if (joinType == JoinRelType.INNER) {
+      return true;
+    }
+    if (joinType == JoinRelType.LEFT) {
+      if (rightFilterRexNode == null || rightFilterRexNode.isAlwaysTrue()) {
+        return true;
+      }
+    }
+    if (joinType == JoinRelType.RIGHT) {
+      if (leftFilterRexNode == null || leftFilterRexNode.isAlwaysTrue()) {
+        return true;
+      }
+    }
+    if (joinType == JoinRelType.FULL) {
+      if ((rightFilterRexNode == null || rightFilterRexNode.isAlwaysTrue())
+          && (leftFilterRexNode == null || leftFilterRexNode.isAlwaysTrue())) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** Operand to a {@link UnifyRule}. */
