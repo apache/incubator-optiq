@@ -906,4 +906,25 @@ public abstract class ReturnTypes {
       return relDataType;
     }
   };
+
+  /**
+   * Type-inference strategy that return binary first.
+   */
+  public static final SqlReturnTypeInference BINARY_FIRST =
+      opBinding -> {
+        RelDataType resultType = null;
+        for (RelDataType type : opBinding.collectOperandTypes()) {
+          if (SqlTypeUtil.isBinary(type)) {
+            resultType = type;
+            break;
+          }
+        }
+        return resultType;
+      };
+
+  /**
+   * Type-inference strategy that for bitwise operator.
+   */
+  public static final SqlReturnTypeInference BITWISE_FUNCTION =
+      chain(LEAST_RESTRICTIVE, BINARY_FIRST);
 }

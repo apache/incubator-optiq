@@ -1120,6 +1120,16 @@ public class SqlFunctions {
     return binaryOperator(b0, b1, (x, y) -> (byte) (x & y));
   }
 
+  /** Bitwise function <code>BIT_AND</code> applied to long and binary values. */
+  public static ByteString bitAnd(long b0, ByteString b1) {
+    return binaryOperator(b1, b0, (x, y) -> (byte) (x & y));
+  }
+
+  /** Bitwise function <code>BIT_AND</code> applied to binary and long values. */
+  public static ByteString bitAnd(ByteString b0, long b1) {
+    return binaryOperator(b0, b1, (x, y) -> (byte) (x & y));
+  }
+
   /** Bitwise function <code>BIT_OR</code> applied to integer values. */
   public static long bitOr(long b0, long b1) {
     return b0 | b1;
@@ -1168,6 +1178,24 @@ public class SqlFunctions {
     }
 
     return new ByteString(result);
+  }
+
+  /**
+   * Utility for bitwise function applied to byteString and long values.
+   *
+   * @param b0 The first byteString value operand of bitwise function.
+   * @param b1 The second long value operand of bitwise function.
+   * @param bitOp BitWise binary operator.
+   * @return ByteString after bitwise operation.
+   */
+  private static ByteString binaryOperator(
+      ByteString b0, long b1, BinaryOperator<Byte> bitOp) {
+    final byte[] bytes0 = b0.getBytes();
+
+    for (int i = 0; i < bytes0.length; i++) {
+      bytes0[i] = bitOp.apply((byte) (b1 >> 8 * (bytes0.length - i - 1)), bytes0[i]);
+    }
+    return new ByteString(bytes0);
   }
 
   // EXP
