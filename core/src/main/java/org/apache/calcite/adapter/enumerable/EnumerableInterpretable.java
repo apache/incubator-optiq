@@ -44,6 +44,7 @@ import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.runtime.Typed;
 import org.apache.calcite.runtime.Utilities;
 import org.apache.calcite.util.Util;
+import org.apache.calcite.util.javac.CalciteCompilerArgs;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -147,7 +148,7 @@ public class EnumerableInterpretable extends ConverterImpl
         fieldCount == 1
             ? new Class[] {Bindable.class, Typed.class}
             : new Class[] {ArrayBindable.class});
-    cbe.setParentClassLoader(EnumerableInterpretable.class.getClassLoader());
+    cbe.setParentClassLoader(CalciteCompilerArgs.DEFAULT.getClassLoader());
     if (CalciteSystemProperty.DEBUG.value()) {
       // Add line numbers to the generated janino class
       cbe.setDebuggingInformation(true, true, true);

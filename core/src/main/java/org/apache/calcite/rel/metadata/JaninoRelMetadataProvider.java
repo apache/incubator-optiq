@@ -22,7 +22,6 @@ import org.apache.calcite.adapter.enumerable.EnumerableHashJoin;
 import org.apache.calcite.adapter.enumerable.EnumerableProject;
 import org.apache.calcite.adapter.enumerable.EnumerableTableScan;
 import org.apache.calcite.config.CalciteSystemProperty;
-import org.apache.calcite.interpreter.JaninoRexCompiler;
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.linq4j.tree.Primitive;
 import org.apache.calcite.plan.hep.HepRelVertex;
@@ -53,6 +52,7 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.ControlFlowException;
 import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.Util;
+import org.apache.calcite.util.javac.CalciteCompilerArgs;
 
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
@@ -431,7 +431,7 @@ public class JaninoRelMetadataProvider implements RelMetadataProvider {
     }
 
     final ISimpleCompiler compiler = compilerFactory.newSimpleCompiler();
-    compiler.setParentClassLoader(JaninoRexCompiler.class.getClassLoader());
+    compiler.setParentClassLoader(CalciteCompilerArgs.DEFAULT.getClassLoader());
 
     final String s = "public final class " + className
         + " implements " + def.handlerClass.getCanonicalName() + " {\n"

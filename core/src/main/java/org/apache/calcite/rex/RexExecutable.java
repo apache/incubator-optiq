@@ -21,6 +21,7 @@ import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.runtime.Utilities;
 import org.apache.calcite.util.Pair;
+import org.apache.calcite.util.javac.CalciteCompilerArgs;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.codehaus.commons.compiler.CompileException;
@@ -59,7 +60,7 @@ public class RexExecutable {
       cbe.setClassName(GENERATED_CLASS_NAME);
       cbe.setExtendedClass(Utilities.class);
       cbe.setImplementedInterfaces(new Class[] {Function1.class, Serializable.class});
-      cbe.setParentClassLoader(RexExecutable.class.getClassLoader());
+      cbe.setParentClassLoader(CalciteCompilerArgs.DEFAULT.getClassLoader());
       cbe.cook(new Scanner(null, new StringReader(code)));
       Class c = cbe.getClazz();
       //noinspection unchecked
