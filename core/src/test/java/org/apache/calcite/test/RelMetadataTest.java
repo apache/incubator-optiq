@@ -20,6 +20,7 @@ import org.apache.calcite.adapter.enumerable.EnumerableMergeJoin;
 import org.apache.calcite.config.CalciteSystemProperty;
 import org.apache.calcite.linq4j.tree.Types;
 import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptPredicateList;
 import org.apache.calcite.plan.RelOptTable;
@@ -28,6 +29,7 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.plan.hep.HepPlanner;
 import org.apache.calcite.plan.hep.HepProgram;
 import org.apache.calcite.plan.hep.HepProgramBuilder;
+import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelCollations;
@@ -93,7 +95,9 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexProgram;
 import org.apache.calcite.rex.RexTableInputRef;
 import org.apache.calcite.rex.RexTableInputRef.RelTableRef;
+import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.runtime.SqlFunctions;
+import org.apache.calcite.sql.SqlExplainLevel;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlSpecialOperator;
@@ -110,6 +114,7 @@ import org.apache.calcite.util.BuiltInMethod;
 import org.apache.calcite.util.Holder;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.ImmutableIntList;
+import org.apache.calcite.util.Util;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
@@ -194,6 +199,11 @@ public class RelMetadataTest extends SqlToRelTestBase {
   private static final ReentrantLock LOCK = new ReentrantLock();
 
   //~ Methods ----------------------------------------------------------------
+
+  /** Creates a tester. */
+  Sql sql(String sql) {
+    return new Sql(tester, sql);
+  }
 
   // ----------------------------------------------------------------------
   // Tests for getPercentageOriginalRows
@@ -535,6 +545,33 @@ public class RelMetadataTest extends SqlToRelTestBase {
         false);
   }
 
+  /** Test case for
+   * <a href="https://issues.apache.org/jira/browse/CALCITE-4192">[CALCITE-4192]
+   * RelMdColumnOrigins get the wrong index of group by columns after RelNode
+   * was optimized by AggregateProjectMergeRule rule</a>. */
+  @Test void testColumnOriginAfterAggProjectMergeRule() {
+    final String sql = "select count(ename), SAL from emp group by SAL";
+    final RelNode rel = tester.convertSqlToRel(sql).rel;
+    final HepProgramBuilder programBuilder = HepProgram.builder();
+    programBuilder.addRuleInstance(CoreRules.AGGREGATE_PROJECT_MERGE);
+    final HepPlanner planner = new HepPlanner(programBuilder.build());
+    planner.setRoot(rel);
+    final RelNode optimizedRel = planner.findBestExp();
+
+    Set<RelColumnOrigin> origins = RelMetadataQuery.instance()
+        .getColumnOrigins(optimizedRel, 1);
+    assertThat(origins.size(), equalTo(1));
+
+    RelColumnOrigin columnOrigin = origins.iterator().next();
+    assertThat(columnOrigin.getOriginColumnOrdinal(), equalTo(5));
+    assertThat(columnOrigin.getOriginTable().getRowType().getFieldNames().get(5),
+        equalTo("SAL"));
+  }
+
+  // ----------------------------------------------------------------------
+  // Tests for getRowCount, getMinRowCount, getMaxRowCount
+  // ----------------------------------------------------------------------
+
   private void checkRowCount(String sql, double expected, double expectedMin,
       double expectedMax) {
     RelNode rel = convertSql(sql);
@@ -646,7 +683,6 @@ public class RelMetadataTest extends SqlToRelTestBase {
     checkRowCount(sql, 1D, // 0, rounded up to row count's minimum 1
         0D, 0D); // 0 * 4
   }
-
 
   @Test void testRowCountJoinEmptyEmpty() {
     final String sql = "select * from (select * from emp limit 0) as emp\n"
@@ -810,6 +846,69 @@ public class RelMetadataTest extends SqlToRelTestBase {
     final String sql = "select count(*) from (select * from emp limit 0)";
     checkRowCount(sql, 1D, 1D, 1D);
   }
+
+  // ----------------------------------------------------------------------
+  // Tests for computeSelfCost.cpu
+  // ----------------------------------------------------------------------
+
+  @Test void testSortCpuCostOffsetLimit() {
+    final String sql = "select ename, deptno from emp\n"
+        + "order by ename limit 5 offset 5";
+    // inputRows = EMP_SIZE = 14
+    // offset + fetch = 5 + 5 = 10
+    // rowBytes = (2 real columns + 3 virtual columns) * 4 bytes per column
+    //   = 5 * 4
+    //   = 20
+    double cpuCost = Util.nLogM(EMP_SIZE, 10) * 5 * 4;
+    sql(sql).assertCpuCost(is(cpuCost), "offset + fetch smaller than table size "
+        + "=> cpu cost should be: inputRows * log(offset + fetch) * rowBytes");
+  }
+
+  @Test void testSortCpuCostLimit() {
+    final String sql = "select ename, deptno from emp limit 10";
+    final double cpuCost = 10 * 5 * 4;
+    sql(sql).assertCpuCost(is(cpuCost), "no order by clause "
+        + "=> cpu cost should be min(fetch + offset, inputRows) * rowBytes");
+  }
+
+  @Test void testSortCpuCostOffset() {
+    final String sql = "select ename from emp order by ename offset 10";
+    double cpuCost = Util.nLogM(EMP_SIZE, EMP_SIZE) * 4 * 4;
+    sql(sql).assertCpuCost(is(cpuCost), "offset smaller than table size "
+        + "=> cpu cost should be: inputRows * log(inputRows) * rowBytes");
+  }
+
+  @Test void testSortCpuCostLargeOffset() {
+    final String sql = "select ename from emp order by ename offset 100";
+    double cpuCost = Util.nLogM(EMP_SIZE, EMP_SIZE) * 4 * 4;
+    sql(sql).assertCpuCost(is(cpuCost), "offset larger than table size "
+        + "=> cpu cost should be: inputRows * log(inputRows) * rowBytes");
+  }
+
+  @Test void testSortCpuCostLimit0() {
+    final String sql = "select ename from emp order by ename limit 0";
+    sql(sql).assertCpuCost(is(0d), "fetch zero => cpu cost should be 0");
+  }
+
+  @Test void testSortCpuCostLimit1() {
+    final String sql = "select ename, deptno from emp\n"
+        + "order by ename limit 1";
+    double cpuCost = EMP_SIZE * 5 * 4;
+    sql(sql).assertCpuCost(is(cpuCost), "fetch 1 "
+        + "=> cpu cost should be inputRows * rowBytes");
+  }
+
+  @Test void testSortCpuCostLargeLimit() {
+    final String sql = "select ename, deptno from emp\n"
+        + "order by ename limit 10000";
+    double cpuCost = Util.nLogM(EMP_SIZE, EMP_SIZE) * 5 * 4;
+    sql(sql).assertCpuCost(is(cpuCost), "sort limit exceeds table size "
+        + "=> cpu cost should be dominated by table size");
+  }
+
+  // ----------------------------------------------------------------------
+  // Tests for getSelectivity
+  // ----------------------------------------------------------------------
 
   private void checkFilterSelectivity(
       String sql,
@@ -3249,6 +3348,46 @@ public class RelMetadataTest extends SqlToRelTestBase {
     }
   }
 
+  @Test void testConstColumnsNdv() {
+    final String sql = "select ename, 100, 200 from emp";
+    final RelNode rel = convertSql(sql);
+    RelMetadataQuery mq = rel.getCluster().getMetadataQuery();
+
+    assertThat(rel, instanceOf(Project.class));
+
+    Project project = (Project) rel;
+    assertThat(project.getProjects().size(), is(3));
+
+    // a non-const column, followed by two constant columns.
+    assertThat(RexUtil.isLiteral(project.getProjects().get(0), true), is(false));
+    assertThat(RexUtil.isLiteral(project.getProjects().get(1), true), is(true));
+    assertThat(RexUtil.isLiteral(project.getProjects().get(2), true), is(true));
+
+    // the distinct row count of const columns should be 1
+    assertThat(mq.getDistinctRowCount(rel, ImmutableBitSet.of(), null), is(1.0));
+    assertThat(mq.getDistinctRowCount(rel, ImmutableBitSet.of(1), null), is(1.0));
+    assertThat(mq.getDistinctRowCount(rel, ImmutableBitSet.of(1, 2), null), is(1.0));
+
+    // the population size of const columns should be 1
+    assertThat(mq.getPopulationSize(rel, ImmutableBitSet.of()), is(1.0));
+    assertThat(mq.getPopulationSize(rel, ImmutableBitSet.of(1)), is(1.0));
+    assertThat(mq.getPopulationSize(rel, ImmutableBitSet.of(1, 2)), is(1.0));
+
+    // the distinct row count of mixed columns depends on the distinct row
+    // count of non-const columns
+    assertThat(mq.getDistinctRowCount(rel, ImmutableBitSet.of(0, 1), null),
+        is(mq.getDistinctRowCount(rel, ImmutableBitSet.of(0), null)));
+    assertThat(mq.getDistinctRowCount(rel, ImmutableBitSet.of(0, 1, 2), null),
+        is(mq.getDistinctRowCount(rel, ImmutableBitSet.of(0), null)));
+
+    // the population size of mixed columns depends on the population size of
+    // non-const columns
+    assertThat(mq.getPopulationSize(rel, ImmutableBitSet.of(0, 1)),
+        is(mq.getPopulationSize(rel, ImmutableBitSet.of(0))));
+    assertThat(mq.getPopulationSize(rel, ImmutableBitSet.of(0, 1, 2)),
+        is(mq.getPopulationSize(rel, ImmutableBitSet.of(0))));
+  }
+
   private static final SqlOperator NONDETERMINISTIC_OP = new SqlSpecialOperator(
           "NDC",
           SqlKind.OTHER_FUNCTION,
@@ -3378,6 +3517,8 @@ public class RelMetadataTest extends SqlToRelTestBase {
     });
   }
 
+  //~ Inner classes and interfaces -------------------------------------------
+
   /** Custom metadata interface. */
   public interface ColType extends Metadata {
     Method METHOD = Types.lookupMethod(ColType.class, "getColType", int.class);
@@ -3465,8 +3606,7 @@ public class RelMetadataTest extends SqlToRelTestBase {
   /**
    * Dummy rel node used for testing.
    */
-  private class DummyRelNode extends SingleRel {
-
+  private static class DummyRelNode extends SingleRel {
     /**
      * Creates a <code>DummyRelNode</code>.
      */
@@ -3478,8 +3618,8 @@ public class RelMetadataTest extends SqlToRelTestBase {
   /**
    * Mocked catalog reader for registering table with composite keys.
    */
-  private class CompositeKeysCatalogReader extends MockCatalogReaderSimple {
-
+  private static class CompositeKeysCatalogReader
+      extends MockCatalogReaderSimple {
     CompositeKeysCatalogReader(RelDataTypeFactory typeFactory, boolean caseSensitive) {
       super(typeFactory, caseSensitive);
     }
@@ -3499,26 +3639,30 @@ public class RelMetadataTest extends SqlToRelTestBase {
     }
   }
 
-  /** Test case for
-   * <a href="https://issues.apache.org/jira/browse/CALCITE-4192">[CALCITE-4192]
-   * RelMdColumnOrigins get the wrong index of group by columns after RelNode was optimized by
-   * AggregateProjectMergeRule rule</a>. */
-  @Test void testColumnOriginAfterAggProjectMergeRule() {
-    final String sql = "select count(ename), SAL from emp group by SAL";
-    final RelNode rel = tester.convertSqlToRel(sql).rel;
-    final HepProgramBuilder programBuilder = HepProgram.builder();
-    programBuilder.addRuleInstance(CoreRules.AGGREGATE_PROJECT_MERGE);
-    final HepPlanner planner = new HepPlanner(programBuilder.build());
-    planner.setRoot(rel);
-    final RelNode optimizedRel = planner.findBestExp();
+  /** Parameters for a test. */
+  private static class Sql {
+    private final Tester tester;
+    private final String sql;
 
-    Set<RelColumnOrigin> origins = RelMetadataQuery.instance()
-        .getColumnOrigins(optimizedRel, 1);
-    assertThat(origins.size(), equalTo(1));
+    Sql(Tester tester, String sql) {
+      this.tester = tester;
+      this.sql = sql;
+    }
 
-    RelColumnOrigin columnOrigin = origins.iterator().next();
-    assertThat(columnOrigin.getOriginColumnOrdinal(), equalTo(5));
-    assertThat(columnOrigin.getOriginTable().getRowType().getFieldNames().get(5),
-        equalTo("SAL"));
+    Sql assertCpuCost(Matcher<Double> matcher, String reason) {
+      RelNode rel = convertSql(tester, sql);
+      RelOptCost cost = computeRelSelfCost(rel);
+      assertThat(reason + "\n"
+          + "sql:" + sql + "\n"
+          + "plan:" + RelOptUtil.toString(rel, SqlExplainLevel.ALL_ATTRIBUTES),
+          cost.getCpu(), matcher);
+      return this;
+    }
+
+    private static RelOptCost computeRelSelfCost(RelNode rel) {
+      final RelMetadataQuery mq = rel.getCluster().getMetadataQuery();
+      RelOptPlanner planner = new VolcanoPlanner();
+      return rel.computeSelfCost(planner, mq);
+    }
   }
 }

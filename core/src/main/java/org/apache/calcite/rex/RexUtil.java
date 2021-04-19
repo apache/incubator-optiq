@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.rex;
 
+import org.apache.calcite.DataContexts;
 import org.apache.calcite.linq4j.function.Predicate1;
 import org.apache.calcite.plan.RelOptPredicateList;
 import org.apache.calcite.plan.RelOptUtil;
@@ -30,7 +31,6 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeFamily;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rex.RexTableInputRef.RelTableRef;
-import org.apache.calcite.schema.Schemas;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
@@ -40,6 +40,7 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
 import org.apache.calcite.util.ControlFlowException;
+import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Litmus;
 import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.RangeSets;
@@ -68,8 +69,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 
-import static org.apache.calcite.linq4j.Nullness.castNonNull;
-
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -79,7 +78,7 @@ public class RexUtil {
 
   /** Executor for a bit of constant reduction. The user can pass in another executor. */
   public static final RexExecutor EXECUTOR =
-      new RexExecutorImpl(Schemas.createDataContext(castNonNull(null), null));
+      new RexExecutorImpl(DataContexts.EMPTY);
 
   private RexUtil() {
   }
@@ -2210,7 +2209,10 @@ public class RexUtil {
     return e -> not(rexBuilder, e);
   }
 
-  /** Applies NOT to an expression. */
+  /** Applies NOT to an expression.
+   *
+   * <p>Unlike {@link #not}, may strengthen the type from {@code BOOLEAN}
+   * to {@code BOOLEAN NOT NULL}. */
   static RexNode not(final RexBuilder rexBuilder, RexNode input) {
     return input.isAlwaysTrue()
         ? rexBuilder.makeLiteral(false)
@@ -2329,6 +2331,28 @@ public class RexUtil {
       }
     }.visitEach(nodes);
     return occurrences;
+  }
+
+  /**
+   * Given some expressions, gets the indices of the non-constant ones.
+   */
+  public static ImmutableBitSet getNonConstColumns(List<RexNode> expressions) {
+    ImmutableBitSet cols = ImmutableBitSet.range(0, expressions.size());
+    return getNonConstColumns(cols, expressions);
+  }
+
+  /**
+   * Given some expressions and columns, gets the indices of the non-constant ones.
+   */
+  public static ImmutableBitSet getNonConstColumns(
+      ImmutableBitSet columns, List<RexNode> expressions) {
+    ImmutableBitSet.Builder nonConstCols = ImmutableBitSet.builder();
+    for (int col : columns) {
+      if (!isLiteral(expressions.get(col), true)) {
+        nonConstCols.set(col);
+      }
+    }
+    return nonConstCols.build();
   }
 
   //~ Inner Classes ----------------------------------------------------------
