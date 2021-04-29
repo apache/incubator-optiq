@@ -23,9 +23,13 @@ import org.apache.calcite.plan.RelTraitDef;
 import org.apache.calcite.plan.hep.HepPlanner;
 import org.apache.calcite.plan.hep.HepProgramBuilder;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.rules.AggregateJoinTransposeRule;
 import org.apache.calcite.rel.rules.AggregateProjectMergeRule;
 import org.apache.calcite.rel.rules.CoreRules;
@@ -36,6 +40,10 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rel.type.RelDataTypeSystemImpl;
+import org.apache.calcite.rex.RexBuilder;
+import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.runtime.FlatLists;
 import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.schema.SchemaPlus;
@@ -84,7 +92,9 @@ import com.google.common.collect.ImmutableSet;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -5014,6 +5024,70 @@ class RelToSqlConverterTest {
         + "LATERAL (SELECT *\n"
         + "FROM TABLE(RAMP(\"$cor0\".\"product_id\"))) AS \"t\"";
     sql(query).ok(expected);
+  }
+
+  /** Test case for
+   * <a href="https://issues.apache.org/jira/browse/CALCITE-4592">[CALCITE-4592]
+   * RelToSqlConverter#visit(Join e) does not populate correlation context</a>. */
+  @Test void testJoinCorrelate() {
+    final RelBuilder relBuilder = relBuilder();
+    final CorrelationId correlationId = relBuilder.getCluster().createCorrel();
+
+    final RelNode empTable = relBuilder.scan("EMP").peek();
+    final RelNode deptTable = relBuilder.scan("DEPT").peek();
+
+    RexInputRef empDeptNo = relBuilder.field(2, 0, "DEPTNO"); //EMP.DEPTNO
+    RexInputRef deptDeptNo = relBuilder.field(2, 1, "DEPTNO"); //DEPT.DEPTNO
+    RexNode joinCond = relBuilder.call(SqlStdOperatorTable.EQUALS, empDeptNo, deptDeptNo);
+    RelNode join = LogicalJoin.create(empTable, deptTable, Collections.emptyList(),
+        joinCond, ImmutableSet.of(correlationId), JoinRelType.INNER);
+
+    final RexBuilder rexBuilder = relBuilder().getRexBuilder();
+    RexNode correlationVariable = rexBuilder.makeCorrel(join.getRowType(), correlationId);
+    RexNode correlatedCondition = relBuilder.call(SqlStdOperatorTable.EQUALS,
+        rexBuilder.makeFieldAccess(correlationVariable, empDeptNo.getIndex()),
+        RexInputRef.of(
+            // its 0, keeping it dynamic if schema changes
+            deptDeptNo.getIndex() - empTable.getRowType().getFieldCount(),
+            deptTable.getRowType()));
+
+    RelNode scalarProject = relBuilder.filter(correlatedCondition)
+        .project(RexInputRef.of(deptTable.getRowType().getFieldCount() - 1, deptTable.getRowType()))
+        .build();
+
+    List<RexNode> projections = new ArrayList<>();
+    for (int i = 0; i < join.getRowType().getFieldCount() - 1; i++) { // skip last field
+      projections.add(RexInputRef.of(i, join.getRowType()));
+    }
+    projections.add(RexSubQuery.scalar(scalarProject)); // project last field as subquery
+    /**
+     * RelNode Tree is as below.
+     *     Project with subquery
+     *         /      \
+     *        /        \
+     *       /          \
+     *     Joiner   Sub query(Correlated Filter + Scalar Project)
+     *     /    \      /
+     *    /      \    /
+     *   /        \  /
+     *  EMP       DEPT
+     */
+    Project projectWithSubQuery = new LogicalProject(
+        join.getCluster(),
+        join.getTraitSet(),
+        Collections.emptyList(),
+        join,
+        projections,
+        join.getRowType()
+    );
+    final String expected = "SELECT \"EMP\".\"EMPNO\", \"EMP\".\"ENAME\", \"EMP\".\"JOB\", \"EMP\""
+        + ".\"MGR\", \"EMP\".\"HIREDATE\", \"EMP\".\"SAL\", \"EMP\".\"COMM\", \"EMP\".\"DEPTNO\", "
+        + "\"DEPT\".\"DEPTNO\" AS \"DEPTNO0\", \"DEPT\".\"DNAME\", (((SELECT \"LOC\"\n"
+        + "FROM \"scott\".\"DEPT\"\n"
+        + "WHERE \"EMP\".\"DEPTNO\" = \"DEPTNO\"))) AS \"LOC\"\n"
+        + "FROM \"scott\".\"EMP\"\n"
+        + "INNER JOIN \"scott\".\"DEPT\" ON \"EMP\".\"DEPTNO\" = \"DEPT\".\"DEPTNO\"";
+    assertThat(toSql(projectWithSubQuery), isLinux(expected));
   }
 
   @Test void testUncollectExplicitAlias() {
