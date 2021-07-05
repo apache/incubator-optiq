@@ -36,7 +36,6 @@ import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.core.Union;
 import org.apache.calcite.rel.core.Values;
 import org.apache.calcite.rel.core.Window;
-import org.apache.calcite.util.BuiltInMethod;
 import org.apache.calcite.util.Util;
 
 import com.google.common.collect.ArrayListMultimap;
@@ -52,10 +51,11 @@ public class RelMdNodeTypes
     implements MetadataHandler<BuiltInMetadata.NodeTypes> {
   public static final RelMetadataProvider SOURCE =
       ReflectiveRelMetadataProvider.reflectiveSource(
-          BuiltInMethod.NODE_TYPES.method, new RelMdNodeTypes());
+          new RelMdNodeTypes(), BuiltInMetadata.NodeTypes.Handler.class);
 
   //~ Methods ----------------------------------------------------------------
 
+  @Deprecated
   @Override public MetadataDef<BuiltInMetadata.NodeTypes> getDef() {
     return BuiltInMetadata.NodeTypes.DEF;
   }

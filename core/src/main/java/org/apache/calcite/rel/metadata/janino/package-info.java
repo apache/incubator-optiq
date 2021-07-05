@@ -14,14 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.calcite.rel.metadata;
 
 /**
- * Marker interface for a handler of metadata.
- *
- * @param <M> Kind of metadata
+ * Defines metadata interfaces and utilities for relational
+ * expressions.
  */
-public interface MetadataHandler<M extends Metadata> {
-  @Deprecated
-  MetadataDef<M> getDef();
-}
+
+/**
+ * Code for generating metadata handlers.
+ */
+package org.apache.calcite.rel.metadata.janino;

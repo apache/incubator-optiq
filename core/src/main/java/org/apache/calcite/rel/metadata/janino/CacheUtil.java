@@ -14,14 +14,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.calcite.rel.metadata;
+package org.apache.calcite.rel.metadata.janino;
+
+import java.util.stream.IntStream;
 
 /**
- * Marker interface for a handler of metadata.
- *
- * @param <M> Kind of metadata
+ * Functions used by generated code.
  */
-public interface MetadataHandler<M extends Metadata> {
-  @Deprecated
-  MetadataDef<M> getDef();
+public class CacheUtil {
+
+  private CacheUtil() {
+  }
+
+  public static Object[] generateRange(String description, int min, int max) {
+    return IntStream.range(min, max)
+        .mapToObj(i -> description + "(" + i + ")")
+        .map(org.apache.calcite.rel.metadata.janino.DescriptiveCacheKey::new)
+        .toArray();
+  }
+
+  public static <E extends Enum<E>> Object[] generateEnum(String description, E[] values) {
+    return java.util.Arrays.stream(values)
+        .map(e -> description + "(" + e + ")")
+        .map(org.apache.calcite.rel.metadata.janino.DescriptiveCacheKey::new)
+        .toArray();
+  }
 }

@@ -20,6 +20,7 @@ import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.rel.RelNode;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -40,6 +41,7 @@ import static java.util.Objects.requireNonNull;
  * Implementation of the {@link RelMetadataProvider}
  * interface that caches results from an underlying provider.
  */
+@Deprecated // to be removed before 2.0
 public class CachingRelMetadataProvider implements RelMetadataProvider {
   //~ Instance fields --------------------------------------------------------
 
@@ -59,7 +61,7 @@ public class CachingRelMetadataProvider implements RelMetadataProvider {
   }
 
   //~ Methods ----------------------------------------------------------------
-
+  @Deprecated // to be removed before 2.0
   @Override public <@Nullable M extends @Nullable Metadata> @Nullable UnboundMetadata<M> apply(
       Class<? extends RelNode> relClass,
       final Class<? extends M> metadataClass) {
@@ -85,6 +87,11 @@ public class CachingRelMetadataProvider implements RelMetadataProvider {
   @Override public <M extends Metadata> Multimap<Method, MetadataHandler<M>> handlers(
       MetadataDef<M> def) {
     return underlyingProvider.handlers(def);
+  }
+
+  @Override public <M extends Metadata> ImmutableSet<? extends MetadataHandler<M>> handlers(
+      Class<? extends MetadataHandler<? extends M>> handlerClass) {
+    return underlyingProvider.handlers(handlerClass);
   }
 
   //~ Inner Classes ----------------------------------------------------------

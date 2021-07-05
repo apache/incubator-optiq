@@ -14,14 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.calcite.rel.metadata;
+package org.apache.calcite.rel.metadata.janino;
 
 /**
- * Marker interface for a handler of metadata.
- *
- * @param <M> Kind of metadata
+ * An object used as a caching key with descriptive {@link #toString()}.  Note the key
+ * reference equality for performance.
  */
-public interface MetadataHandler<M extends Metadata> {
-  @Deprecated
-  MetadataDef<M> getDef();
+public final class DescriptiveCacheKey {
+
+  private final String description;
+
+  public DescriptiveCacheKey(String description) {
+    this.description = description;
+  }
+
+  @Override public String toString() {
+    return description;
+  }
 }

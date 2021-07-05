@@ -53,7 +53,6 @@ import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.util.BitSets;
 import org.apache.calcite.util.Bug;
-import org.apache.calcite.util.BuiltInMethod;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Util;
 import org.apache.calcite.util.mapping.Mapping;
@@ -130,10 +129,11 @@ import static java.util.Objects.requireNonNull;
 public class RelMdPredicates
     implements MetadataHandler<BuiltInMetadata.Predicates> {
   public static final RelMetadataProvider SOURCE = ReflectiveRelMetadataProvider
-      .reflectiveSource(BuiltInMethod.PREDICATES.method, new RelMdPredicates());
+      .reflectiveSource(new RelMdPredicates(), BuiltInMetadata.Predicates.Handler.class);
 
   private static final List<RexNode> EMPTY_LIST = ImmutableList.of();
 
+  @Deprecated
   @Override public MetadataDef<BuiltInMetadata.Predicates> getDef() {
     return BuiltInMetadata.Predicates.DEF;
   }

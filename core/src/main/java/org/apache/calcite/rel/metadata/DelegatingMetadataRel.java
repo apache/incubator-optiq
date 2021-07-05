@@ -16,12 +16,11 @@
  */
 package org.apache.calcite.rel.metadata;
 
+import org.apache.calcite.rel.RelNode;
+
 /**
- * Marker interface for a handler of metadata.
- *
- * @param <M> Kind of metadata
+ * Interface for {@link RelNode} where the metadata is derived from another node.
  */
-public interface MetadataHandler<M extends Metadata> {
-  @Deprecated
-  MetadataDef<M> getDef();
+public interface DelegatingMetadataRel {
+  RelNode getCurrentRel();
 }

@@ -16,12 +16,24 @@
  */
 package org.apache.calcite.rel.metadata;
 
+import org.apache.calcite.rel.RelNode;
+
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 /**
- * Marker interface for a handler of metadata.
- *
- * @param <M> Kind of metadata
+ * A cache for Rel Nodes Metadata.  {@link NullSentinel} is used for storing nulls and
+ * detecting cyclic metadata calls.
  */
-public interface MetadataHandler<M extends Metadata> {
-  @Deprecated
-  MetadataDef<M> getDef();
+public interface MetadataCache {
+  /**
+   * Removes cached metadata values for specified RelNode.
+   *
+   * @param rel RelNode whose cached metadata should be removed
+   * @return true if cache for the provided RelNode was not empty
+   */
+  boolean clear(RelNode rel);
+
+  @Nullable Object remove(RelNode relNode, Object args);
+  @Nullable Object get(RelNode relNode, Object args);
+  @Nullable Object put(RelNode relNode, Object args, Object value);
 }
