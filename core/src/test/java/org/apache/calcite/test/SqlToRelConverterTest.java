@@ -88,7 +88,12 @@ class SqlToRelConverterTest extends SqlToRelTestBase {
   /** Sets the SQL statement for a test. */
   public final Sql sql(String sql) {
     return new Sql(sql, true, tester, false, UnaryOperator.identity(),
-        tester.getConformance());
+        tester.getConformance(), true);
+  }
+
+  public final Sql expr(String expr) {
+    return new Sql(expr, true, tester, false, UnaryOperator.identity(),
+            tester.getConformance(), false);
   }
 
   @Test void testDotLiteralAfterNestedRow() {
@@ -3445,6 +3450,18 @@ class SqlToRelConverterTest extends SqlToRelTestBase {
   }
 
   /** Test case for
+   * <a href="https://issues.apache.org/jira/browse/CALCITE-4683">[CALCITE-4683]
+   * In-list to join with new project generated cause replaced root leaves property
+   * to be missing</a>. */
+  @Test void testInToSemiJoinWithNewProject() {
+    final String sql = "SELECT * FROM (SELECT '20210101' AS dt, deptno, max(cast(deptno2 as\n"
+        + "varchar(200))) as m FROM (SELECT emp.deptno as deptno, dept.deptno as deptno2 FROM emp\n"
+        + "JOIN dept on emp.deptno = dept.deptno) tmp GROUP BY deptno) WHERE cast(deptno as\n"
+        + "varchar) in ('1', '3', '5')";
+    sql(sql).withConfig(c -> c.withInSubQueryThreshold(2)).ok();
+  }
+
+  /** Test case for
    * <a href="https://issues.apache.org/jira/browse/CALCITE-1944">[CALCITE-1944]
    * Window function applied to sub-query with dynamic star gets wrong
    * plan</a>. */
@@ -3866,6 +3883,39 @@ class SqlToRelConverterTest extends SqlToRelTestBase {
     sql(sql).ok();
   }
 
+  /** Test case for
+   * <a href="https://issues.apache.org/jira/browse/CALCITE-4644">[CALCITE-4644]
+   * Add PERCENTILE_CONT and PERCENTILE_DISC aggregate functions</a>. */
+  @Test void testPercentileCont() {
+    final String sql = "select\n"
+        + " percentile_cont(0.25) within group (order by deptno)\n"
+        + "from emp";
+    sql(sql).ok();
+  }
+
+  @Test void testPercentileContWithGroupBy() {
+    final String sql = "select deptno,\n"
+        + " percentile_cont(0.25) within group (order by empno desc)\n"
+        + "from emp\n"
+        + "group by deptno";
+    sql(sql).ok();
+  }
+
+  @Test void testPercentileDisc() {
+    final String sql = "select\n"
+        + " percentile_disc(0.25) within group (order by deptno)\n"
+        + "from emp";
+    sql(sql).ok();
+  }
+
+  @Test void testPercentileDiscWithGroupBy() {
+    final String sql = "select deptno,\n"
+        + " percentile_disc(0.25) within group (order by empno)\n"
+        + "from emp\n"
+        + "group by deptno";
+    sql(sql).ok();
+  }
+
   @Test void testOrderByRemoval1() {
     final String sql = "select * from (\n"
         + "  select empno from emp order by deptno offset 0) t\n"
@@ -4192,6 +4242,12 @@ class SqlToRelConverterTest extends SqlToRelTestBase {
     sql(sql).trim(true).ok();
   }
 
+
+  @Test public void testInWithConstantList() {
+    String expr = "1 in (1,2,3)";
+    expr(expr).ok();
+  }
+
   /**
    * Visitor that checks that every {@link RelNode} in a tree is valid.
    *
@@ -4232,10 +4288,12 @@ class SqlToRelConverterTest extends SqlToRelTestBase {
     private final boolean trim;
     private final UnaryOperator<SqlToRelConverter.Config> config;
     private final SqlConformance conformance;
+    private final boolean query;
+
 
     Sql(String sql, boolean decorrelate, Tester tester, boolean trim,
         UnaryOperator<SqlToRelConverter.Config> config,
-        SqlConformance conformance) {
+        SqlConformance conformance, boolean query) {
       this.sql = Objects.requireNonNull(sql, "sql");
       if (sql.contains(" \n")) {
         throw new AssertionError("trailing whitespace");
@@ -4245,6 +4303,7 @@ class SqlToRelConverterTest extends SqlToRelTestBase {
       this.trim = trim;
       this.config = Objects.requireNonNull(config, "config");
       this.conformance = Objects.requireNonNull(conformance, "conformance");
+      this.query = query;
     }
 
     public void ok() {
@@ -4256,13 +4315,13 @@ class SqlToRelConverterTest extends SqlToRelTestBase {
           .withConformance(conformance)
           .withConfig(config)
           .withConfig(c -> c.withTrimUnusedFields(true))
-          .assertConvertsTo(sql, plan, trim);
+          .assertConvertsTo(sql, plan, trim, query);
     }
 
     public Sql withConfig(UnaryOperator<SqlToRelConverter.Config> config) {
       final UnaryOperator<SqlToRelConverter.Config> config2 =
           this.config.andThen(Objects.requireNonNull(config, "config"))::apply;
-      return new Sql(sql, decorrelate, tester, trim, config2, conformance);
+      return new Sql(sql, decorrelate, tester, trim, config2, conformance, query);
     }
 
     public Sql expand(boolean expand) {
@@ -4270,19 +4329,19 @@ class SqlToRelConverterTest extends SqlToRelTestBase {
     }
 
     public Sql decorrelate(boolean decorrelate) {
-      return new Sql(sql, decorrelate, tester, trim, config, conformance);
+      return new Sql(sql, decorrelate, tester, trim, config, conformance, query);
     }
 
     public Sql with(Tester tester) {
-      return new Sql(sql, decorrelate, tester, trim, config, conformance);
+      return new Sql(sql, decorrelate, tester, trim, config, conformance, query);
     }
 
     public Sql trim(boolean trim) {
-      return new Sql(sql, decorrelate, tester, trim, config, conformance);
+      return new Sql(sql, decorrelate, tester, trim, config, conformance, query);
     }
 
     public Sql conformance(SqlConformance conformance) {
-      return new Sql(sql, decorrelate, tester, trim, config, conformance);
+      return new Sql(sql, decorrelate, tester, trim, config, conformance, query);
     }
   }
 }
