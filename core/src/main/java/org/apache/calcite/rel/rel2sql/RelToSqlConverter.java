@@ -72,6 +72,7 @@ import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlMatchRecognize;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.SqlNumericLiteral;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.SqlTableRef;
 import org.apache.calcite.sql.SqlUpdate;
@@ -329,7 +330,20 @@ public class RelToSqlConverter extends SqlImplementor
           ImmutableSet.of(Clause.HAVING));
       parseCorrelTable(e, x);
       final Builder builder = x.builder(e);
-      builder.setHaving(builder.context.toSql(null, e.getCondition()));
+      SqlNode condition = builder.context.toSql(null, e.getCondition());
+      if (ImmutableBitSet.union(aggregate.getGroupSets()).cardinality()
+          != aggregate.getGroupSet().cardinality()) {
+        final SqlNodeList groupingList =  new SqlNodeList(ImmutableList.of(), SqlParserPos.ZERO);
+        aggregate.getGroupSet().forEach(value -> groupingList.add(builder.context.field(value)));
+        condition = SqlStdOperatorTable.AND.createCall(SqlParserPos.ZERO, condition,
+            SqlStdOperatorTable.NOT_EQUALS.createCall(
+                SqlParserPos.ZERO,
+                SqlNumericLiteral.createExactNumeric(
+                    String.valueOf(0),
+                    SqlParserPos.ZERO),
+                SqlStdOperatorTable.GROUPING_ID.createCall(groupingList)));
+      }
+      builder.setHaving(condition);
       return builder.result();
     } else {
       final Result x = visitInput(e, 0, Clause.WHERE);
@@ -504,12 +518,16 @@ public class RelToSqlConverter extends SqlImplementor
           SqlStdOperatorTable.ROLLUP.createCall(SqlParserPos.ZERO, groupKeys));
     default:
     case OTHER:
+      List<SqlNode> groupingSetsList = aggregate.getGroupSets().stream()
+          .map(groupSet -> groupItem(groupKeys, groupSet, aggregate.getGroupSet()))
+          .collect(Collectors.toList());
+      if (ImmutableBitSet.union(aggregate.getGroupSets()).cardinality()
+          != aggregate.getGroupSet().cardinality()) {
+        groupingSetsList.add(
+            groupItem(groupKeys, aggregate.getGroupSet(), aggregate.getGroupSet()));
+      }
       return ImmutableList.of(
-          SqlStdOperatorTable.GROUPING_SETS.createCall(SqlParserPos.ZERO,
-              aggregate.getGroupSets().stream()
-                  .map(groupSet ->
-                      groupItem(groupKeys, groupSet, aggregate.getGroupSet()))
-                  .collect(Collectors.toList())));
+          SqlStdOperatorTable.GROUPING_SETS.createCall(SqlParserPos.ZERO, groupingSetsList));
     }
   }
 
