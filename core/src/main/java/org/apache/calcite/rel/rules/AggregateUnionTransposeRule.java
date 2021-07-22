@@ -40,6 +40,9 @@ import org.apache.calcite.sql.fun.SqlSumEmptyIsZeroAggFunction;
 import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.calcite.util.mapping.Mapping;
+import org.apache.calcite.util.mapping.MappingType;
+import org.apache.calcite.util.mapping.Mappings;
 
 import com.google.common.collect.ImmutableList;
 
@@ -151,9 +154,36 @@ public class AggregateUnionTransposeRule
 
     // create a new union whose children are the aggregates created above
     relBuilder.union(true, union.getInputs().size());
+
+    // Create the top aggregate. We must adjust group key indexes of the
+    // original aggregate. E.g., if the original tree was:
+    //
+    // Aggregate[groupSet=$1, ...]
+    //   Union[...]
+    //
+    // Then the new tree should be:
+    // Aggregate[groupSet=$0, ...]
+    //   Union[...]
+    //     Aggregate[groupSet=$1, ...]
+    Mapping topGroupMapping = Mappings.create(MappingType.INVERSE_SURJECTION,
+        union.getRowType().getFieldCount(),
+        aggRel.getGroupCount()
+    );
+    int i = 0;
+    for (int groupKey : aggRel.getGroupSet()) {
+      topGroupMapping.set(groupKey, i++);
+    }
+
+    ImmutableBitSet topGroupSet = Mappings.apply(topGroupMapping, aggRel.getGroupSet());
+    ImmutableList.Builder<ImmutableBitSet> builder = ImmutableList.builder();
+    for (ImmutableBitSet groupSet : aggRel.getGroupSets()) {
+      builder.add(Mappings.apply(topGroupMapping, groupSet));
+    }
+    ImmutableList<ImmutableBitSet> topGroupSets = builder.build();
+
     relBuilder.aggregate(
-        relBuilder.groupKey(aggRel.getGroupSet(),
-            (Iterable<ImmutableBitSet>) aggRel.getGroupSets()),
+        relBuilder.groupKey(topGroupSet,
+            (Iterable<ImmutableBitSet>) topGroupSets),
         transformedAggCalls);
     call.transformTo(relBuilder.build());
   }
