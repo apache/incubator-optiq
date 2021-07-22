@@ -89,6 +89,7 @@ import org.apache.calcite.rel.rules.UnionMergeRule;
 import org.apache.calcite.rel.rules.ValuesReduceRule;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeSystemImpl;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
@@ -107,6 +108,7 @@ import org.apache.calcite.sql.fun.SqlLibrary;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.validate.SqlConformanceEnum;
 import org.apache.calcite.sql.validate.SqlMonotonicity;
@@ -6768,5 +6770,44 @@ class RelOptRulesTest extends RelOptTestBase {
     } else {
       relFn(relFn).with(hepPlanner).checkUnchanged();
     }
+  }
+
+  /**
+   *  Test case for <a href="https://issues.apache.org/jira/browse/CALCITE-4652">[CALCITE-4652]
+   *  AggregateExpandDistinctAggregatesRule must cast top aggregates to original type</a>.
+   *
+   *  Checks AggregateExpandDistinctAggregatesRule when return type of the SUM aggregate
+   *  is changed (expanded) by define custom type factory.
+   */
+  @Test void testDistinctCountWithExpandSumType() {
+    /* Expand SUM return type. */
+    RelDataTypeFactory typeFactory = new SqlTypeFactoryImpl(new RelDataTypeSystemImpl() {
+      @Override public RelDataType deriveSumType(RelDataTypeFactory typeFactory,
+          RelDataType argumentType) {
+        switch (argumentType.getSqlTypeName()) {
+        case INTEGER:
+        case BIGINT:
+          return typeFactory.createSqlType(SqlTypeName.DECIMAL);
+
+        default:
+          return super.deriveSumType(typeFactory, argumentType);
+        }
+      }
+    });
+
+    // Expected plan:
+    // LogicalProject(EXPR$0=[CAST($0):BIGINT NOT NULL], EXPR$1=[$1])
+    //   LogicalAggregate(group=[{}], EXPR$0=[$SUM0($1)], EXPR$1=[COUNT($0)])
+    //     LogicalAggregate(group=[{0}], EXPR$0=[COUNT()])
+    //       LogicalProject(COMM=[$6])
+    //         LogicalTableScan(table=[[CATALOG, SALES, EMP]])
+    //
+    // The top 'LogicalProject' must be added in case SUM type is expanded
+    // because type of original expression 'COUNT(DISTINCT comm)' is BIGINT
+    // and type of SUM (of BIGINT) is DECIMAL.
+    sql("SELECT count(comm), COUNT(DISTINCT comm) FROM emp")
+        .withTester(t -> t.withTypeFactorySupplier(() -> typeFactory))
+        .withRule(CoreRules.AGGREGATE_EXPAND_DISTINCT_AGGREGATES_TO_JOIN)
+        .check();
   }
 }
